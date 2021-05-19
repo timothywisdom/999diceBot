@@ -8,7 +8,9 @@ let lossesInARow = 0;
 let maxLossesInARow = 0;
 let resetCount = 0;
 let currentLosses = [];
-let defaultWagerPercentOfBalance = 0.1;
+let serverSeedHash;
+let clientSeed;
+let defaultWagerPercentOfBalance = 0.01;
 let defaultChanceToWinPercent = 51;
 let defaultChanceToWinAgainstLostPercent = 95;
 let defaultKeepBetting = false;
@@ -17,6 +19,7 @@ let betTableObserver = undefined;
 let faucetObserver = undefined;
 var faucetInterval = undefined;
 var placeBetPromiseResolve = undefined;
+var validationHtmlInterval = undefined;
 var logEnabled = true;
 
 function log() {
@@ -27,6 +30,62 @@ function log() {
 			console.log(arguments[0], arguments[1]);
 		}
 	}
+}
+
+const stringToBytes = (str, length) => {
+	var bytes = [];
+	var i = length;
+	do {
+		bytes[--i] = str & (255);
+		str = str>>8;
+	} while ( i )
+	return bytes;
+}
+
+const hexStringToByte = (str) => {
+	if (!str) {
+	  return new Uint8Array();
+	}
+	
+	var a = [];
+	for (var i = 0, len = str.length; i < len; i+=2) {
+	  a.push(parseInt(str.substr(i,2),16));
+	}
+	
+	return new Uint8Array(a);
+}
+
+const byteToHexString = (uint8arr) => {
+	if (!uint8arr) {
+	  return '';
+	}
+	
+	var hexStr = '';
+	for (var i = 0; i < uint8arr.length; i++) {
+	  var hex = (uint8arr[i] & 0xff).toString(16);
+	  hex = (hex.length === 1) ? '0' + hex : hex;
+	  hexStr += hex;
+	}
+	
+	return hexStr;
+}
+
+const sha256 = async (byteArray) => {
+	// return crypto.subtle.digest("SHA-256", new TextEncoder("utf-8").encode(str)).then(buf => {
+	// 	return Array.prototype.map.call(new Uint8Array(buf), x=>(('00'+x.toString(16)).slice(-2))).join('');
+	// });
+	return crypto.subtle.digest("SHA-256", byteArray).then(buf => {
+		return new Uint8Array(buf);
+	});
+}
+
+const sha512 = async (byteArray) => {
+	// return crypto.subtle.digest("SHA-512", new TextEncoder("utf-8").encode(str)).then(buf => {
+	// 	return Array.prototype.map.call(new Uint8Array(buf), x=>(('00'+x.toString(16)).slice(-2))).join('');
+	// });
+	return crypto.subtle.digest("SHA-512", byteArray).then(buf => {
+		return new Uint8Array(buf);
+	});
 }
 
 const _createFaucetObserver = () => {
@@ -123,7 +182,11 @@ const updateLosses = (amount) => {
 
 const createSingleBetMutationObserver =  () => {
 	return new MutationObserver( async (mutationsList, betTableObserver) => {
-		if (placeBetPromiseResolve) {
+		const _previousBalance = currentBalance;
+		const _currentBalance = getBalanceFromUI();
+		const _betProfit = fixDecimal(_currentBalance - _previousBalance);
+
+		if (_betProfit !== 0  && placeBetPromiseResolve) {
 			placeBetPromiseResolve();
 		}
 	});
@@ -136,12 +199,7 @@ const startBetTableObserver = () => {
 }
 const stopBetTableObserver = () => betTableObserver.disconnect();
 
-const start = async () => {
-	if (!betTableObserver) {
-		betTableObserver = createSingleBetMutationObserver();
-	}
-	startBetTableObserver();
-	
+const start = () => {
 	defaultKeepBetting = true;
 	
 	placeSingleBet();
@@ -183,13 +241,20 @@ const calculateWager = async (wagerPercentOfBalance = defaultWagerPercentOfBalan
 		wager = fixDecimal(currentBalance * (wagerPercentOfBalanceForLoss / 100));
 		let targetProfit = getTargetProfit(wager, chanceToWinAgainstLostPercent);
 		log(`Wager for Loss of ${lossMagnitude} = ${wagerPercentOfBalance}% of ${currentBalance} = ${wager} to win ${targetProfit}`);
+
+        if (wager > currentBalance) {
+			log(`!! Wager (${wager}) is > than currentBalance (${currentBalance}). Cancelling wager.`);
+			wager = 0;
+		}
 		
+		/*
 		if (wager > currentBalance) {
 			currentLosses = [];
 			wager = fixDecimal(currentBalance * (wagerPercentOfBalance / 100));
 			targetProfit = getTargetProfit(wager, chanceToWinPercent);
-			log(`Wager for Giveup Loss of ${targetProfit} = ${wagerPercentOfBalance}% of ${currentBalance} = ${wager}. This site is a scam!`);
+			log(`Wager for Giveup Loss of ${targetProfit} = ${wagerPercentOfBalance}% of ${currentBalance} = ${wager}`);
 		}
+		*/
 	} else {
 		wager = fixDecimal(currentBalance * (wagerPercentOfBalance / 100));
 		targetProfit = getTargetProfit(wager, chanceToWinPercent);
@@ -199,17 +264,110 @@ const calculateWager = async (wagerPercentOfBalance = defaultWagerPercentOfBalan
 	return wager;
 }
 
+const _getServerSecretSeed = async (url, rolledNumber) => {
+	const pageResponse = await fetch(url, {
+		// credentials: 'include',
+		headers: {
+			'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+			'user-agent': navigator.userAgent,
+			'cache-control': 'max-age=0',
+			'upgrade-insecure-requests': 1,
+			'sec-fetch-dest': 'document',
+			'sec-fetch-mode': 'navigate',
+			'sec-fetch-site': 'none'
+		},
+		referrer: ''
+	});
+	validationHtml = await pageResponse.text();
+	const regex = /serverSeed='([A-z0-9]*)'/g
+	log(`Attempting to read serverSeed from ${url} (for number ${rolledNumber})`);
+	const matches = regex.exec(validationHtml);
+	if (matches && matches[1]) {
+		const serverSeed = matches[1];
+		log("serverSecretSeed", serverSeed);
+		return serverSeed;
+	} else {
+		return false;
+	}
+}
+
+const getServerSecretSeed = async (url, rolledNumber) => {
+	const aPromise = new Promise(async (res, rej) => {
+		let attemptCount = 1;
+		validationHtmlInterval = setInterval(async ()=>{
+			let serverSeed = await _getServerSecretSeed(url, rolledNumber);
+			attemptCount++;
+			if (attemptCount >= 10) {
+				clearInterval(validationHtmlInterval);
+				validationHtmlInterval = undefined;
+				rej(`Failed to get serverSeed from ${url} after ${attemptCount} attempts`)
+			}
+			if (serverSeed !== false) {
+				clearInterval(validationHtmlInterval);
+				validationHtmlInterval = undefined;
+				res(serverSeed);
+			}
+		}, 3500);
+	})
+	return aPromise;
+}
+
+const validateBetResult = async (serverSecretSeed, clientSeed, betNumber, betResult, serverSeedHash) => {
+	log(`validateBetResult("${serverSecretSeed}", ${clientSeed}, ${betNumber}, ${betResult}, "${serverSeedHash}");`)
+	const serverSecretSeedBytes = hexStringToByte(serverSecretSeed);
+	// log(`serverSecretSeedBytes: ${serverSecretSeed}`, serverSecretSeedBytes);
+	const clientBytes = stringToBytes(clientSeed, 4);
+	const betNumberBytes = stringToBytes(betNumber, 4);
+	const serverSeedHashBytes = hexStringToByte(serverSeedHash);
+	// log(`serverSeedHashBytes: ${serverSeedHash}`, serverSeedHashBytes);
+
+	const serverSecretSeedBytesHashed = await sha256(serverSecretSeedBytes);
+	// log(`serverSecretSeedBytesHashed:`, serverSecretSeedBytesHashed);
+	if (serverSeedHashBytes.join(',') !== serverSecretSeedBytesHashed.join(',')) {
+		log(`${serverSeedHashBytes.join(',')} !== ${serverSecretSeedBytesHashed.join(',')}`);
+		return false;
+	}
+
+	const data = new Uint8Array([...serverSecretSeedBytes, ...(new Uint8Array(clientBytes)), ...(new Uint8Array(betNumberBytes))]);
+	const hashPre = await sha512(data)
+	const hash = await sha512(hashPre);
+
+	// log(`data: ${byteToHexString(data)}`, data);
+	// log(`hash: ${byteToHexString(hash)}`, hash);
+
+	while(true)
+	{
+		for (var x = 0; x <= 61; x+= 3) {
+			// log(`${hash[x]} << 16 | (${hash[x+1]} << 8) | ${hash[x + 2]} = ${(hash[x] << 16)} | ${(hash[x+1] << 8)} | ${hash[x + 2]} = ${(hash[x] << 16) | (hash[x+1] << 8) | hash[x + 2]}`);
+			let result = (hash[x] << 16) | (hash[x+1] << 8) | hash[x + 2];
+			// log(`${x}: ${result}`);
+			if (result < 16000000) {
+				// log(`result is less than 16000000. Mod = ${result % 1000000}. betResult = ${betResult}`)
+				return result % 1000000 === betResult;
+			}
+		}
+		hash = await sha512(hash);
+	}
+}
+
 const placeSingleBet = async (wagerPercentOfBalance = defaultWagerPercentOfBalance, chanceToWinPercent = defaultChanceToWinPercent, chanceToWinAgainstLostPercent = defaultChanceToWinAgainstLostPercent, keepBetting = defaultKeepBetting) => {
 	const aPromise = new Promise(async (res, rej)=>{
 		placeBetPromiseResolve = res;
 		const wager = await calculateWager(wagerPercentOfBalance, chanceToWinPercent, chanceToWinAgainstLostPercent);
 		chanceToWinPercent = hasLosses() ? chanceToWinAgainstLostPercent : chanceToWinPercent;
 		const targetProfit = getTargetProfit(wager, chanceToWinPercent);
+
+		serverSeedHash = document.querySelector('.FairTabServerSeedHash').innerText;
+		clientSeed = Math.floor(Math.random() * 1000000000) + 1; // Generate a seed between 1 and 1000000000
+		document.querySelector('.ManualSeedControls .StandardTextBox').value = clientSeed;
+		// var clientSeed = view.controls.getClientSeed();
+
+
 		if (wager > 0 && targetProfit > 0) {
 			currentBalance = getBalanceFromUI();
 			const wagerPercent = Math.floor(wager/currentBalance * 10000) / 100;
 			
-			log(`Wagering ${wager} of ${currentBalance} (${wagerPercent}%) with ${chanceToWinPercent}% chance to win ${targetProfit}.`);	
+			log(`Wagering ${wager} of ${currentBalance} (${wagerPercent}%) with ${chanceToWinPercent}% chance to win ${targetProfit}. Server Seed Hash: ${serverSeedHash}. Client Seed: ${clientSeed}.`);	
 
 			document.getElementById('BetSizeInput').value = wager;
 			document.getElementById('BetSizeInput').dispatchEvent(new Event('blur'));
@@ -220,14 +378,13 @@ const placeSingleBet = async (wagerPercentOfBalance = defaultWagerPercentOfBalan
 			var displayCurrencyId = config.displayCurrencyId;
 			var wagerSatoshis = view.parseCommaFloat(wager) * 1e8;
 			var range = view.util.getBetRange();
-			var seed = view.controls.getClientSeed();
-			pipe.server.placeBet(wagerSatoshis, 0, range, seed, displayCurrencyId, true);
+			pipe.server.placeBet(wagerSatoshis, 0, range, clientSeed, displayCurrencyId, true);
 		} else {
 			rej(`Wager: ${wager}. TargetProfit: ${targetProfit}`);
 		}
 	});
 	
-	aPromise.then(() => {
+	aPromise.then(async () => {
 		placeBetPromiseResolve = undefined;
 		const previousBalance = currentBalance;
 		currentBalance = getBalanceFromUI();
@@ -235,6 +392,18 @@ const placeSingleBet = async (wagerPercentOfBalance = defaultWagerPercentOfBalan
 		const betProfit = fixDecimal(currentBalance - previousBalance);
 		currentProfit = fixDecimal(currentProfit + betProfit);
 		maxProfit = Math.max(maxProfit, currentProfit);
+		const verificationUrl = document.querySelector('#UserBets tbody tr:first-of-type td:nth-child(2) a').href;
+		const rolledNumber = Math.round(parseFloat(document.querySelector('#UserBets tbody tr:first-of-type td:nth-child(2) a span:first-of-type').innerText, 10) * 10000);
+
+		let isValidBet
+		try {
+			const serverSecretSeed = await getServerSecretSeed(verificationUrl, rolledNumber);
+			isValidBet = await validateBetResult(serverSecretSeed, clientSeed, 0, rolledNumber, serverSeedHash);
+		} catch (err) {
+			log(err);
+			isValidBet = false;
+		}
+
 		const isLoss = betProfit < 0;
 		if (isLoss) {
 			lossesInARow = lossesInARow + 1;
@@ -243,22 +412,28 @@ const placeSingleBet = async (wagerPercentOfBalance = defaultWagerPercentOfBalan
 			lossesInARow = 0;
 		}
 		
-		log(`${isLoss ? '---LOST---' : '---WON---'}
+		log(`${isLoss ? `   --- LOST (${rolledNumber}) valid: ${isValidBet} ---` : `   --- WON (${rolledNumber}) valid: ${isValidBet} ---`}
 Current Balance: ${currentBalance}.      Bet Profit: ${betProfit}.          ResetCount: ${resetCount}
-    Max Balance: ${maxBalance}.  Current Profit: ${currentProfit}.       Losses in Row: ${lossesInARow}
-                                  Max Profit: ${maxProfit}.    Max Losses in Row: ${maxLossesInARow}`);
+	Max Balance: ${maxBalance}.  Current Profit: ${currentProfit}.       Losses in Row: ${lossesInARow}
+									Max Profit: ${maxProfit}.    Max Losses in Row: ${maxLossesInARow}`);
 
 		updateLosses(betProfit);
+
+		log(`-------------------------------------`);
 		
-		if (keepBetting) {
+		if (keepBetting && isValidBet) {
 			setTimeout(() => placeSingleBet(), 0);
 		}
 	}).catch((err)=>{
-		console.log("Failed to placeSingleBet", err);
+		log("Failed to placeSingleBet:", err);
 	});
 	
 	return aPromise;
 }
 
+if (!betTableObserver) {
+	betTableObserver = createSingleBetMutationObserver();
+}
+startBetTableObserver();
 
-document.querySelector('#ContentTabsContainer div:nth-child(2)').click();
+document.querySelector('#ContentTabsContainer div:nth-child(5)').click();
