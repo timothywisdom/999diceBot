@@ -464,7 +464,7 @@ const validateBetResult = async (
 		serverSeedHashBytes.join(",") !== serverSecretSeedBytesHashed.join(",")
 	) {
 		log(
-			`${serverSeedHashBytes.join(
+			`INVALID Bet: The Server Seed does not match the Hashed Server Seed:\n${serverSeedHashBytes.join(
 				","
 			)} !== ${serverSecretSeedBytesHashed.join(",")}`
 		);
@@ -489,7 +489,15 @@ const validateBetResult = async (
 			// log(`${x}: ${result}`);
 			if (result < 16000000) {
 				// log(`result is less than 16000000. Mod = ${result % 1000000}. betResult = ${betResult}`)
-				return result % 1000000 === betResult;
+				const isValid = result % 1000000 === betResult;
+				if (!isValid) {
+					console.log(
+						`INVALID Bet: Different number rolls calculated:\n${
+							result % 1000000
+						} !== ${betResult}`
+					);
+				}
+				return isValid;
 			}
 		}
 		hash = await sha512(hash);
@@ -624,6 +632,14 @@ const placeSingleBet = async (
 						rolledNumber,
 						serverSeedHash
 					);
+
+					if (!isValidBet) {
+						window.open(
+							verificationUrl,
+							"_blank",
+							"location=yes,height=570,width=520,scrollbars=yes,status=yes"
+						);
+					}
 				} catch (err) {
 					log(err);
 					isValidBet = false;
