@@ -602,30 +602,32 @@ const placeSingleBet = async (
 				) * 10000
 			);
 
-			let isValidBet;
-			try {
-				const serverSecretSeed = await getServerSecretSeed(
-					verificationUrl,
-					rolledNumber
-				);
-				isValidBet = await validateBetResult(
-					serverSecretSeed,
-					clientSeed,
-					0,
-					rolledNumber,
-					serverSeedHash
-				);
-			} catch (err) {
-				log(err);
-				isValidBet = false;
-			}
-
 			const isLoss = betProfit < 0;
 			if (isLoss) {
 				lossesInARow = lossesInARow + 1;
 				maxLossesInARow = Math.max(maxLossesInARow, lossesInARow);
 			} else {
 				lossesInARow = 0;
+			}
+
+			let isValidBet = !isLoss;
+			if (isLoss) {
+				try {
+					const serverSecretSeed = await getServerSecretSeed(
+						verificationUrl,
+						rolledNumber
+					);
+					isValidBet = await validateBetResult(
+						serverSecretSeed,
+						clientSeed,
+						0,
+						rolledNumber,
+						serverSeedHash
+					);
+				} catch (err) {
+					log(err);
+					isValidBet = false;
+				}
 			}
 
 			log(`${
