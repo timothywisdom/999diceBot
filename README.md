@@ -2,7 +2,7 @@
 
 A JavaScript Bot for 999dice.com
 
-1. Go to https://www.999dice.com/
+1. Go to https://www.999dice.com/?388516348 (note this is my referral link so I'll get a kickback from the site, as a thanks for the bot)
 2. Get some "Free Dogecoin" from the faucet
 3. Hit F12 to open your Dev Tools
 4. Open the Javascript console tab
