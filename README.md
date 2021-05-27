@@ -31,6 +31,18 @@ into the JavaScript Console.
 
 If you increase defaultWagerPercentOfBalance, you'll win faster but you're likely to not have enough balance to overcome a losing streak (of 3 or more losses in a row).
 
+## Bet Validation
+Every losing bet is validated using the algorithm given by the site. I've written the validation code in C# and again in JavaScript. Before each bet, the site gives you the hashed version of the ServerSeed. You choose the ClientSeed and the BetId is always 0 (for single bets). The rolled number is calculated by concatenating:
+
+> ServerSeed + ClientSeed + BetId
+
+then hashing that (twice) and then extracting bits to "roll" the number. You can validate any bet via JavaScript or C# (I recommend using LinqPad, a free C# app, to run the BetValidator.cs file).
+
+The command (in both JS and C#) is:
+> validateBetResult([ServerSeed], [ClientSeed], [BetId (i.e. 0)], [BetResult], [ServerSeedHashed])
+
+Validation will check that when the ServerSeed is hashsed, it will produce ServerSeedHashed. Then it will attempt to recreate the BetResult using the above formula.
+
 ## WARNING
 
 The site has caused this bot to lose 3 times in a row with a 95% chance to win each bet. This has a mathematical 0.1225% chance of happening (consecutively), yet it happens multiple times in a day - so the site is suspicious!
