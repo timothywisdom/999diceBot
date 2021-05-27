@@ -18,12 +18,18 @@ At 0.01% of your balance, you can afford to lose 4 times in a row, which has a p
 Lost bets are validated using the Server Seed, your Client Seed and Nonce of 0.
 
 ## Configuration
-Change the values of the following parameters to alter how the bot behaves. To alter a parameter, type "[parameterName] = [value]" into the JavaScript Console.
+Change the values of the following parameters to alter how the bot behaves. To alter a parameter, type
+> [parameterName] = [value]
+
+into the JavaScript Console.
+
 |Parameter Name                       | Default Value |Notes                                                                  |
-|-------------------------------------|:-------------:|:---------------------------------------------------------------------:|
-|defaultWagerPercentOfBalance         | 0.01          | Percent of your current balance that is wagered if you have no losses |
-|defaultChanceToWinPercent            | 51            | Your "Chance to Win" if you have no losses                            |
-|defaultChanceToWinAgainstLostPercent | 95            | Your "Chance to Win" if you have losses                               |
+|:------------------------------------|:-------------:|:---------------------------------------------------------------------|
+|defaultWagerPercentOfBalance         | 0.01          |Percent of your current balance that is wagered if you have no losses |
+|defaultChanceToWinPercent            | 51            |Your "Chance to Win" if you have no losses                       |
+|defaultChanceToWinAgainstLostPercent | 95            |Your "Chance to Win" if you have losses                      |
+
+If you increase defaultWagerPercentOfBalance, you'll win faster but you're likely to not have enough balance to overcome a losing streak (of 3 or more losses in a row).
 
 ## WARNING
 
