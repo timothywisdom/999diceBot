@@ -6,7 +6,7 @@ A JavaScript Bot for 999dice.com
 2. Get some "Free Dogecoin" from the faucet
 3. Hit F12 to open your Dev Tools
 4. Open the Javascript console tab
-5. Copy and Paste the contents of index.js into the Javascript console and press Enter
+5. Copy and Paste the contents of index.js into the Javascript console and press Enter. WARNING: Unless you understand JavaScript code, I highly recommend never doing this with code you don't understand or from people you don't know and trust.
 6. Type "start()" and press Enter to start the bot
 7. Watch the JavaScript console for output of what's happening
 8. Type "stop()" and press Enter to stop the bot
