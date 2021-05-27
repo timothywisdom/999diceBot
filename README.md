@@ -35,4 +35,6 @@ If you increase defaultWagerPercentOfBalance, you'll win faster but you're likel
 
 The site has caused this bot to lose 3 times in a row with a 95% chance to win each bet. This has a mathematical 0.1225% chance of happening (consecutively), yet it happens multiple times in a day - so the site is suspicious!
 
-We have also seen few losing bets fail validation, which means the site could be cheating. We're still validating if there's not a timing bug in the bot code, which might also produce this result.
+I have also seen a few losing bets fail validation, which means the site could be cheating. I'm still validating if there's not a timing bug in the bot code, which might also produce this result.
+
+Suffice to say, I don't fully trust this site to be 100% provably fair, as they claim.
