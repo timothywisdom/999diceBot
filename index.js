@@ -18,7 +18,7 @@ let betTableObserver = undefined;
 let faucetObserver = undefined;
 var faucetInterval = undefined;
 var placeBetPromiseResolve = undefined;
-var validationHtmlInterval = undefined;
+var validationHtmlTimeoutId = undefined;
 var logEnabled = true;
 var betTimeoutId = undefined;
 var betTimeoutMS = 10000;
@@ -360,7 +360,12 @@ const calculateWager = async (
 	return wager;
 };
 
-const _getServerSecretSeed = async (url, rolledNumber, attemptCount) => {
+const _getServerSecretSeed = async (
+	url,
+	rolledNumber,
+	attemptCount,
+	timeoutMS = 1000
+) => {
 	const pageResponse = await fetch(url, {
 		// credentials: 'include',
 		headers: {
@@ -377,13 +382,13 @@ const _getServerSecretSeed = async (url, rolledNumber, attemptCount) => {
 	validationHtml = await pageResponse.text();
 	const serverSeedRegEx = /serverSeed='([A-z0-9]*)'/g;
 	log(
-		`Attempting to read serverSeed from ${url} (for number ${rolledNumber}). Attempt ${attemptCount}`
+		`Attempting to read serverSeed from ${url} (for number ${rolledNumber}). Attempt ${attemptCount}. Timeout: ${timeoutMS}`
 	);
 	const matches = serverSeedRegEx.exec(validationHtml);
 	if (matches && matches[1]) {
 		const serverSeed = matches[1];
 		log(
-			`serverSecretSeed ${serverSeed} from ${url} (for number ${rolledNumber}). Attempt ${attemptCount}`
+			`serverSecretSeed ${serverSeed} from ${url} (for number ${rolledNumber}). Attempt ${attemptCount}. Timeout: ${timeoutMS}`
 		);
 		return serverSeed;
 	} else {
@@ -398,45 +403,45 @@ const _getServerSecretSeed = async (url, rolledNumber, attemptCount) => {
 	}
 };
 
-const getServerSecretSeed = async (url, rolledNumber) => {
+const getServerSecretSeed = async (
+	url,
+	rolledNumber,
+	timeoutMS = 0,
+	attemptCount = 0
+) => {
 	const aPromise = new Promise(async (res, rej) => {
-		let attemptCount = 0;
-		validationHtmlInterval = setInterval(async () => {
+		validationHtmlTimeoutId = setTimeout(async () => {
 			attemptCount++;
 			serverSeed = await _getServerSecretSeed(
 				url,
 				rolledNumber,
-				attemptCount
+				attemptCount,
+				timeoutMS
 			);
-			if (attemptCount >= 10) {
-				clearInterval(validationHtmlInterval);
-				validationHtmlInterval = undefined;
-				window.open(
-					url,
-					"_blank",
-					"location=yes,height=570,width=520,scrollbars=yes,status=yes"
-				);
-				rej(
-					`Failed to get serverSeed from ${url} after ${attemptCount} attempts`
-				);
-			}
 			if (serverSeed !== false && serverSeed !== "archived") {
-				clearInterval(validationHtmlInterval);
-				validationHtmlInterval = undefined;
+				validationHtmlTimeoutId = undefined;
 				res(serverSeed);
 			} else if (serverSeed === "archived") {
-				clearInterval(validationHtmlInterval);
-				validationHtmlInterval = undefined;
+				validationHtmlTimeoutId = undefined;
 				window.open(
 					url,
 					"_blank",
 					"location=yes,height=570,width=520,scrollbars=yes,status=yes"
 				);
 				rej(
-					`Failed to get serverSeed from ${url} after ${attemptCount} attempts due to serverSeed being archived`
+					`Failed to get serverSeed from ${url} after ${attemptCount} attempts (with final timeout being ${timeoutMS}) due to serverSeed being archived`
+				);
+			} else if (serverSeed === false) {
+				res(
+					await getServerSecretSeed(
+						url,
+						rolledNumber,
+						timeoutMS + 2000,
+						attemptCount
+					)
 				);
 			}
-		}, 3500);
+		}, timeoutMS);
 	});
 	return aPromise;
 };
@@ -512,12 +517,12 @@ const setupTimeoutForBet = (betTag) => {
 	}
 
 	betTimeoutId = setTimeout(() => {
-		if (getCurrentBetTag() === betTag && !validationHtmlInterval) {
+		if (getCurrentBetTag() === betTag && !validationHtmlTimeoutId) {
 			log(
 				"currentBetTag has not updated in 10 seconds and we aren't attempting to validate a bet so we try to bet again."
 			);
 			placeSingleBet();
-		} else if (getCurrentBetTag() === betTag && validationHtmlInterval) {
+		} else if (getCurrentBetTag() === betTag && validationHtmlTimeoutId) {
 			log(
 				"currentBetTag has not updated in 10 seconds but we're validating a bet so do nothing."
 			);
@@ -618,6 +623,15 @@ const placeSingleBet = async (
 				lossesInARow = 0;
 			}
 
+			log(`${
+				isLoss
+					? `      --- LOST (${rolledNumber}) ---`
+					: `      --- WON (${rolledNumber}) ---`
+			}
+Current Balance: ${currentBalance}.      Bet Profit: ${betProfit}.          ResetCount: ${resetCount}
+	Max Balance: ${maxBalance}.  Current Profit: ${currentProfit}.       Losses in Row: ${lossesInARow}
+                                  Max Profit: ${maxProfit}.   Max Losses in Row: ${maxLossesInARow}`);
+
 			let isValidBet = !isLoss;
 			if (isLoss) {
 				try {
@@ -644,16 +658,10 @@ const placeSingleBet = async (
 					log(err);
 					isValidBet = false;
 				}
+				log(`valid bet: ${isValidBet}`);
+			} else {
+				log(`valid bet: who cares`);
 			}
-
-			log(`${
-				isLoss
-					? `   --- LOST (${rolledNumber}) valid: ${isValidBet} ---`
-					: `   --- WON (${rolledNumber}) valid: ${isValidBet} ---`
-			}
-Current Balance: ${currentBalance}.      Bet Profit: ${betProfit}.          ResetCount: ${resetCount}
-	Max Balance: ${maxBalance}.  Current Profit: ${currentProfit}.       Losses in Row: ${lossesInARow}
-									Max Profit: ${maxProfit}.    Max Losses in Row: ${maxLossesInARow}`);
 
 			updateLosses(betProfit);
 
