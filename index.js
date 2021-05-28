@@ -218,7 +218,8 @@ const createSingleBetMutationObserver = () => {
 };
 
 const startBetTableObserver = () => {
-	const targetNode = document.querySelector(".UserBalance");
+	// const targetNode = document.querySelector(".UserBalance");
+	const targetNode = document.querySelector("#UserBets tbody");
 	const config = { attributes: true, childList: true, subtree: true };
 	betTableObserver.observe(targetNode, config);
 };
@@ -614,6 +615,12 @@ const placeSingleBet = async (
 					10
 				) * 10000
 			);
+			const isProfitFromTable =
+				document
+					.querySelector(
+						"#UserBets tbody tr:first-of-type td:nth-child(5) span:first-of-type"
+					)
+					.innerText.indexOf("+") > -1;
 
 			const isLoss = betProfit < 0;
 			if (isLoss) {
@@ -625,8 +632,8 @@ const placeSingleBet = async (
 
 			log(`${
 				isLoss
-					? `      --- LOST (${rolledNumber}) ---`
-					: `      --- WON (${rolledNumber}) ---`
+					? `      --- LOST (${rolledNumber}) ${!isProfitFromTable} ---`
+					: `      --- WON (${rolledNumber}) ${isProfitFromTable} ---`
 			}
 Current Balance: ${currentBalance}.      Bet Profit: ${betProfit}.          ResetCount: ${resetCount}
 	Max Balance: ${maxBalance}.  Current Profit: ${currentProfit}.       Losses in Row: ${lossesInARow}
@@ -659,8 +666,6 @@ Current Balance: ${currentBalance}.      Bet Profit: ${betProfit}.          Rese
 					isValidBet = false;
 				}
 				log(`valid bet: ${isValidBet}`);
-			} else {
-				log(`valid bet: who cares`);
 			}
 
 			updateLosses(betProfit);
